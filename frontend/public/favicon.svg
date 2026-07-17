@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 70 70" width="100%" height="100%" style="background: transparent;">
+  <defs>
+    <!-- Intense Golden Neon Glow -->
+    <filter id="robux-gold-glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <!-- Metallic Gold Core Gradient -->
+    <linearGradient id="coin-gold-core" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFE066" />   <!-- Shiny Light Gold -->
+      <stop offset="40%" stop-color="#F5B014" />  <!-- Classic Robux Amber -->
+      <stop offset="80%" stop-color="#C77D00" />   <!-- Deep Golden Shadow -->
+      <stop offset="100%" stop-color="#8A5000" />  <!-- Dark Bronze Base -->
+    </linearGradient>
+
+    <!-- High-Contrast Rim Bevel Gradient -->
+    <linearGradient id="coin-gold-rim" x1="100%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />   <!-- Pure Specular Reflection -->
+      <stop offset="30%" stop-color="#FCD34D" />  <!-- Soft Gold -->
+      <stop offset="100%" stop-color="#B45309" /> <!-- Dark Amber Rim -->
+    </linearGradient>
+  </defs>
+
+  <!-- FULL GOLDEN ROBUX HEXAGON ICON -->
+  <g transform="translate(0, 0)">
+    <!-- Soft Outer Gold Ambient Aura -->
+    <polygon points="35,2 65,18 65,52 35,68 5,52 5,18" fill="none" stroke="#F5B014" stroke-width="4" opacity="0.4" filter="url(#robux-gold-glow)" />
+    
+    <!-- Solid Metallic Gold Hexagon Base Plate -->
+    <polygon points="35,4 63,19 63,51 35,66 7,51 7,19" fill="url(#coin-gold-core)" />
+    
+    <!-- Raised Beveled Outer Border Face -->
+    <polygon points="35,4 63,19 63,51 35,66 7,51 7,19" fill="none" stroke="url(#coin-gold-rim)" stroke-width="3" />
+    
+    <!-- Inner Isometric Ridge Ring -->
+    <polygon points="35,9 57,21 57,48 35,60 13,48 13,21" fill="none" stroke="#FFE999" stroke-width="1.5" opacity="0.8" />
+    
+    <!-- Hallowed-out Square Center Cutout (Blends seamlessly with your background) -->
+    <polygon points="35,22 49,30 35,38 21,30" fill="#0B0F19" stroke="url(#coin-gold-rim)" stroke-width="2.5" />
+    
+    <!-- Top Dynamic Light Glare Overlay -->
+    <polygon points="35,4 63,19 35,11 7,19" fill="#FFFFFF" opacity="0.25" />
+  </g>
+</svg>
