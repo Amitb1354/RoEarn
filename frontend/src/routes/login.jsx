@@ -90,7 +90,7 @@ function LoginPage() {
     <AuthShell title="Welcome back, grinder." subtitle="Log in to keep your streak alive.">
       <form onSubmit={submit} className="space-y-4">
         {error && <div className="rounded-lg bg-destructive/10 p-3 text-xs text-destructive">{error}</div>}
-        <FieldInput icon={Mail} type="email" placeholder="you@robloxian.gg" required />
+        <FieldInput icon={Mail} type="email" placeholder="example@gmail.com" required />
         <FieldInput icon={Lock} type="password" placeholder="Password" required />
 
         <div className="flex items-center justify-between text-xs">
