@@ -1,28 +1,9 @@
 {
-  "services": {
-    "frontend": {
-      "root": "frontend",
-      "framework": "vite"
-    },
-    "backend": {
-      "root": "backend",
-      "entrypoint": "server.js"
+  "version": 2,
+  "build": {
+    "env": {
+      "VITE_SUPABASE_URL": "https://your-supabase-project.supabase.co",
+      "VITE_SUPABASE_ANON_KEY": "your-anon-key"
     }
-  },
-  "rewrites": [
-    {
-      "source": "/api(/.*)?",
-      "destination": {
-        "type": "service",
-        "service": "backend"
-      }
-    },
-    {
-      "source": "/(.*)",
-      "destination": {
-        "type": "service",
-        "service": "frontend"
-      }
-    }
-  ]
+  }
 }
