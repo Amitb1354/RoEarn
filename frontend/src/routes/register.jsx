@@ -43,6 +43,11 @@ function RegisterPage() {
     setMessage(null);
     const email = e.target.elements[1].value;
     const password = e.target.elements[2].value;
+    if (!email.endsWith('@gmail.com')) {
+      setError('Please use a @gmail.com address');
+      setLoading(false);
+      return;
+    }
     try {
       const { data, error } = await supabase.auth.signUp({ email, password });
       if (error) throw error;
@@ -102,7 +107,7 @@ function RegisterPage() {
 
         <form onSubmit={submit} className="mt-8 space-y-4">
           <FieldInput icon={User} type="text" placeholder="Roblox username" required />
-          <FieldInput icon={Mail} type="email" placeholder="Email address" required />
+          <FieldInput icon={Mail} type="email" placeholder="example@gmail.com" required />
           <FieldInput
             icon={Lock}
             type="password"
