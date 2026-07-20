@@ -3,7 +3,7 @@ import { motion } from "motion/react";
 import { useState } from "react";
 import { RoEarnLogo } from "@/components/RoEarnLogo";
 import { ArrowRight, Lock, Mail } from "lucide-react";
-
+import { supabase } from '@/utils/auth';
 export const Route = createFileRoute("/login")({
   head: () => ({
     meta: [
@@ -57,16 +57,39 @@ export function FieldInput({ icon: Icon, ...props }) {
 function LoginPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => navigate({ to: "/dashboard" }), 700);
+    setError(null);
+    const email = e.target.elements[0].value;
+    const password = e.target.elements[1].value;
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      const userId = data.user?.id;
+      const existing = localStorage.getItem('device_account_bound');
+      if (userId) {
+        if (existing && existing !== userId) {
+          await supabase.auth.signOut();
+          setError('Security Restriction: This device is already linked to another account.');
+        } else {
+          localStorage.setItem('device_account_bound', userId);
+          navigate({ to: '/dashboard' });
+        }
+      }
+    } catch (e) {
+      setError(e.message || 'Login failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <AuthShell title="Welcome back, grinder." subtitle="Log in to keep your streak alive.">
       <form onSubmit={submit} className="space-y-4">
+        {error && <div className="rounded-lg bg-destructive/10 p-3 text-xs text-destructive">{error}</div>}
         <FieldInput icon={Mail} type="email" placeholder="you@robloxian.gg" required />
         <FieldInput icon={Lock} type="password" placeholder="Password" required />
 

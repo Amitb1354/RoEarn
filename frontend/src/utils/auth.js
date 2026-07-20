@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { getFingerprint } from '@/utils/fingerprint';
 
 // Load env variables (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY) from Vite's import.meta.env
-const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
+export const supabase = createClient(import.meta.env.VITE_SUPABASE_URL, import.meta.env.VITE_SUPABASE_ANON_KEY);
 
 /**
  * Wrapper that automatically attaches security related headers to every request

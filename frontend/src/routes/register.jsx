@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { RoEarnLogo } from "@/components/RoEarnLogo";
 import { ArrowRight, Lock, Mail, User, Users } from "lucide-react";
 import { FieldInput } from "./login";
+import { supabase } from '@/utils/auth';
 
 export const Route = createFileRoute("/register")({
   head: () => ({
@@ -19,6 +20,8 @@ function RegisterPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [referrer, setReferrer] = useState(null);
+  const [error, setError] = useState(null);
+  const [message, setMessage] = useState(null);
 
   // Read ?ref= param and store in sessionStorage
   useEffect(() => {
@@ -33,10 +36,36 @@ function RegisterPage() {
     }
   }, []);
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => navigate({ to: "/dashboard" }), 800);
+    setError(null);
+    setMessage(null);
+    const email = e.target.elements[1].value;
+    const password = e.target.elements[2].value;
+    try {
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if (error) throw error;
+      // sign-up successful; prompt email verification
+      setMessage('Please check your email to verify your account.');
+      // Bind device if not already bound
+      const existing = localStorage.getItem('device_account_bound');
+      const userId = data.user?.id;
+      if (userId) {
+        if (existing && existing !== userId) {
+          await supabase.auth.signOut();
+          setError('Security Restriction: This device is already linked to another account.');
+        } else {
+          localStorage.setItem('device_account_bound', userId);
+          // optionally navigate after verification delay
+          setTimeout(() => navigate({ to: '/dashboard' }), 800);
+        }
+      }
+    } catch (e) {
+      setError(e.message || 'Registration failed');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -100,6 +129,9 @@ function RegisterPage() {
               .
             </span>
           </label>
+
+          {error && <p className="text-sm text-destructive mb-2">{error}</p>}
+          {message && <p className="text-sm text-muted-foreground mb-2">{message}</p>}
 
           <button
             type="submit"
