@@ -3,7 +3,8 @@ import { motion } from "motion/react";
 import { useState } from "react";
 import { RoEarnLogo } from "@/components/RoEarnLogo";
 import { ArrowRight, Lock, Mail } from "lucide-react";
-import { supabase } from '@/utils/auth';
+import { supabase, isSupabaseConfigured } from "@/utils/auth";
+
 export const Route = createFileRoute("/login")({
   head: () => ({
     meta: [
@@ -58,29 +59,36 @@ function LoginPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   const submit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    const email = e.target.elements[0].value;
-    const password = e.target.elements[1].value;
+
+    if (!isSupabaseConfigured) {
+      setError("Authentication service (Supabase) is not configured yet. Please configure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in Vercel.");
+      setLoading(false);
+      return;
+    }
+
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
       const userId = data.user?.id;
-      const existing = localStorage.getItem('device_account_bound');
+      const existing = localStorage.getItem("device_account_bound");
       if (userId) {
         if (existing && existing !== userId) {
           await supabase.auth.signOut();
-          setError('Security Restriction: This device is already linked to another account.');
+          setError("Security Restriction: This device is already linked to another account.");
         } else {
-          localStorage.setItem('device_account_bound', userId);
-          navigate({ to: '/dashboard' });
+          localStorage.setItem("device_account_bound", userId);
+          navigate({ to: "/dashboard" });
         }
       }
     } catch (e) {
-      setError(e.message || 'Login failed');
+      setError(e.message || "Login failed");
     } finally {
       setLoading(false);
     }
@@ -90,8 +98,29 @@ function LoginPage() {
     <AuthShell title="Welcome back, grinder." subtitle="Log in to keep your streak alive.">
       <form onSubmit={submit} className="space-y-4">
         {error && <div className="rounded-lg bg-destructive/10 p-3 text-xs text-destructive">{error}</div>}
-        <FieldInput icon={Mail} type="email" placeholder="example@gmail.com" required />
-        <FieldInput icon={Lock} type="password" placeholder="Password" required />
+        {!isSupabaseConfigured && (
+          <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3 text-xs text-amber-400">
+            ⚠️ Supabase environment variables missing on Vercel. Set VITE_SUPABASE_URL & VITE_SUPABASE_ANON_KEY.
+          </div>
+        )}
+        <FieldInput
+          icon={Mail}
+          type="email"
+          name="email"
+          placeholder="example@gmail.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+        />
+        <FieldInput
+          icon={Lock}
+          type="password"
+          name="password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+        />
 
         <div className="flex items-center justify-between text-xs">
           <label className="flex items-center gap-2 text-muted-foreground">

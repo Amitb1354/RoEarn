@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { RoEarnLogo } from "@/components/RoEarnLogo";
 import { ArrowRight, Lock, Mail, User, Users } from "lucide-react";
 import { FieldInput } from "./login";
-import { supabase } from '@/utils/auth';
+import { supabase, isSupabaseConfigured } from "@/utils/auth";
 
 export const Route = createFileRoute("/register")({
   head: () => ({
@@ -22,6 +22,10 @@ function RegisterPage() {
   const [referrer, setReferrer] = useState(null);
   const [error, setError] = useState(null);
   const [message, setMessage] = useState(null);
+
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   // Read ?ref= param and store in sessionStorage
   useEffect(() => {
@@ -41,33 +45,43 @@ function RegisterPage() {
     setLoading(true);
     setError(null);
     setMessage(null);
-    const email = e.target.elements[1].value;
-    const password = e.target.elements[2].value;
-    if (!email.endsWith('@gmail.com')) {
-      setError('Please use a @gmail.com address');
+
+    if (!isSupabaseConfigured) {
+      setError("Authentication service (Supabase) is not configured yet. Please configure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in Vercel.");
       setLoading(false);
       return;
     }
+
     try {
-      const { data, error } = await supabase.auth.signUp({ email, password });
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            roblox_username: username,
+            referrer_code: referrer || undefined,
+          },
+        },
+      });
       if (error) throw error;
+      
       // sign-up successful; prompt email verification
-      setMessage('Please check your email to verify your account.');
+      setMessage("Account created! Please check your email to verify your account.");
+      
       // Bind device if not already bound
-      const existing = localStorage.getItem('device_account_bound');
+      const existing = localStorage.getItem("device_account_bound");
       const userId = data.user?.id;
       if (userId) {
         if (existing && existing !== userId) {
           await supabase.auth.signOut();
-          setError('Security Restriction: This device is already linked to another account.');
+          setError("Security Restriction: This device is already linked to another account.");
         } else {
-          localStorage.setItem('device_account_bound', userId);
-          // optionally navigate after verification delay
-          setTimeout(() => navigate({ to: '/dashboard' }), 800);
+          localStorage.setItem("device_account_bound", userId);
+          setTimeout(() => navigate({ to: "/dashboard" }), 1200);
         }
       }
     } catch (e) {
-      setError(e.message || 'Registration failed');
+      setError(e.message || "Registration failed");
     } finally {
       setLoading(false);
     }
@@ -106,12 +120,34 @@ function RegisterPage() {
         </p>
 
         <form onSubmit={submit} className="mt-8 space-y-4">
-          <FieldInput icon={User} type="text" placeholder="Roblox username" required />
-          <FieldInput icon={Mail} type="email" placeholder="example@gmail.com" required />
+          {!isSupabaseConfigured && (
+            <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3 text-xs text-amber-400">
+              ⚠️ Supabase environment variables missing on Vercel. Set VITE_SUPABASE_URL & VITE_SUPABASE_ANON_KEY.
+            </div>
+          )}
+
+          <FieldInput
+            icon={User}
+            type="text"
+            placeholder="Roblox username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            required
+          />
+          <FieldInput
+            icon={Mail}
+            type="email"
+            placeholder="example@gmail.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
           <FieldInput
             icon={Lock}
             type="password"
             placeholder="Choose a password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
             required
             minLength={6}
           />
@@ -136,7 +172,7 @@ function RegisterPage() {
           </label>
 
           {error && <p className="text-sm text-destructive mb-2">{error}</p>}
-          {message && <p className="text-sm text-muted-foreground mb-2">{message}</p>}
+          {message && <p className="text-sm text-emerald-400 mb-2">{message}</p>}
 
           <button
             type="submit"

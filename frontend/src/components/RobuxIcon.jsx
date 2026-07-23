@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 export function RobuxIcon({ size = 32, className }) {
   return (
     <img
-      src="/robux.webp"
+      src="/RoEarnCash.svg"
       width={size}
       height={size}
       alt="Robux"
