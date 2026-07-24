@@ -12,6 +12,7 @@ export const Route = createFileRoute("/ptc")({
 const SHORTLINK_DAILY_CAP = 20;
 const PTC_DAILY_CAP = 40;
 const TOTAL = SHORTLINK_DAILY_CAP + PTC_DAILY_CAP;
+const SHORTLINK_PROVIDER_IDS = ["timewall-sl", "lootably-sl", "adgate-sl", "roearn-sl"];
 
 function PTCBoard() {
   const [completed, setCompleted] = useState(new Set());
@@ -28,9 +29,10 @@ function PTCBoard() {
     setPending((previous) => new Set(previous).add(i));
     const taskCategory = premium ? "shortlink" : "ptc";
     const adPayoutValue = premium ? 0.5 : 0.3;
+    const providerId = premium ? SHORTLINK_PROVIDER_IDS[i % SHORTLINK_PROVIDER_IDS.length] : "ptc-board";
 
     try {
-      await completeTask(taskCategory, adPayoutValue);
+      await completeTask(taskCategory, adPayoutValue, { providerId });
       setCompleted((previous) => {
         const next = new Set(previous).add(i);
         writeDailyLocalSet("roearn-ptc-completed", next);

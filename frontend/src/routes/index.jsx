@@ -63,8 +63,6 @@ const features = [
 const tiers = [
   { label: "Starter", amount: 400, sub: "$5.00 Gift Card" },
   { label: "Grinder", amount: 800, sub: "$10.00 Gift Card", popular: true },
-  { label: "Whale", amount: 1200, sub: "$15.00 Gift Card" },
-  { label: "Legend", amount: 2000, sub: "$25.00 Gift Card" },
 ];
 
 function Landing() {
@@ -329,7 +327,7 @@ function Landing() {
       </section>
 
       <footer className="relative z-10 border-t border-border/60 py-8 text-center text-xs text-muted-foreground">
-        © 2026 RoEarn. Not affiliated with Roblox Corporation.
+        Roearn is an independent rewards platform and is not affiliated with, sponsored by, or endorsed by Roblox Corporation. Roblox and Robux are registered trademarks of Roblox Corporation.
       </footer>
     </div>
   );

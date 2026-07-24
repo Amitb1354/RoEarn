@@ -57,6 +57,7 @@ function RegisterPage() {
         email,
         password,
         options: {
+          emailRedirectTo: `${window.location.origin}/login`,
           data: {
             roblox_username: username,
             referrer_code: referrer || undefined,
@@ -76,6 +77,11 @@ function RegisterPage() {
           await supabase.auth.signOut();
           setError("Security Restriction: This device is already linked to another account.");
         } else {
+          await supabase.rpc("ensure_user_profile", {
+            target_user_id: userId,
+            target_username: username,
+            incoming_referral_code: referrer || null,
+          });
           localStorage.setItem("device_account_bound", userId);
           setTimeout(() => navigate({ to: "/dashboard" }), 1200);
         }

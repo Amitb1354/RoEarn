@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { HelpCircle, Shield, Sparkles } from "lucide-react";
 import { RobuxIcon } from "@/components/RobuxIcon";
 import { isSupabaseConfigured, supabase } from "@/utils/auth";
+import { fetchWithdrawalHistory } from "@/utils/roearnData";
 
 export const Route = createFileRoute("/withdraw")({
   head: () => ({ meta: [{ title: "Withdraw — RoEarn" }] }),
@@ -14,14 +15,13 @@ function Withdraw() {
   const giftCardTiers = [
     { robux: 400, cashValue: "$5.00", points: 400 },
     { robux: 800, cashValue: "$10.00", points: 800 },
-    { robux: 1200, cashValue: "$15.00", points: 1200 },
-    { robux: 2000, cashValue: "$25.00", points: 2000 },
   ];
   const [tierPoints, setTierPoints] = useState("400");
   const [currentUserPoints, setCurrentUserPoints] = useState(0);
   const [userId, setUserId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState(null);
+  const [withdrawals, setWithdrawals] = useState([]);
 
   useEffect(() => {
     let mounted = true;
@@ -41,6 +41,10 @@ function Withdraw() {
 
       if (mounted && data) {
         setCurrentUserPoints(Number(data.robux_balance || 0));
+      }
+
+      if (mounted) {
+        setWithdrawals(await fetchWithdrawalHistory(authUserId));
       }
     }
 
@@ -73,6 +77,7 @@ function Withdraw() {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Gift Card redemption failed.");
       setCurrentUserPoints((points) => points - selectedTier.points);
+      setWithdrawals(await fetchWithdrawalHistory(userId));
       setNotice("Gift Card payout request submitted.");
     } catch (error) {
       setNotice(error.message || "Gift Card redemption failed.");
@@ -224,6 +229,40 @@ function Withdraw() {
           </motion.div>
         </div>
       </div>
+
+      <section className="glass-card p-5">
+        <div className="text-xs uppercase tracking-wider text-muted-foreground">
+          Withdrawal History
+        </div>
+        <div className="mt-4 space-y-2">
+          {withdrawals.length === 0 ? (
+            <div className="rounded-lg border border-white/5 bg-slate-950/40 p-3 text-xs text-muted-foreground">
+              No Gift Card redemptions yet.
+            </div>
+          ) : (
+            withdrawals.map((withdrawal) => (
+              <div
+                key={withdrawal.id}
+                className="rounded-lg border border-white/5 bg-slate-950/40 p-3"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                  <span className="font-semibold">
+                    {withdrawal.gift_card_robux?.toLocaleString()} Robux Digital Gift Card
+                  </span>
+                  <span className="text-xs uppercase tracking-wider text-accent">
+                    {withdrawal.status}
+                  </span>
+                </div>
+                {withdrawal.ecard_pin && (
+                  <div className="mt-2 rounded-md border border-accent/20 bg-accent/10 px-3 py-2 font-mono text-xs text-accent">
+                    {withdrawal.ecard_pin}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      </section>
     </div>
   );
 }

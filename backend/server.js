@@ -23,6 +23,7 @@ const DAILY_TASK_CAPS = {
   ptc: 40,
   shortlink: 20,
   passive_ad: 30,
+  offerwall: 100,
 };
 
 const TASK_PAYOUT_SPLIT = 0.4;
@@ -32,13 +33,12 @@ const DEFAULT_AD_PAYOUT_VALUES = {
   ptc: 0.3,
   shortlink: 0.5,
   passive_ad: 0.1,
+  offerwall: 0.25,
 };
 
 const GIFT_CARD_TIERS = [
   { robux: 400, cashValue: 5, points: 400 },
   { robux: 800, cashValue: 10, points: 800 },
-  { robux: 1200, cashValue: 15, points: 1200 },
-  { robux: 2000, cashValue: 25, points: 2000 },
 ];
 
 const MIN_GIFT_CARD_POINTS = GIFT_CARD_TIERS[0].points;
@@ -50,11 +50,13 @@ function normalizeTaskCategory(category) {
   if (['banner', 'video', 'banner_ad', 'video_ad', 'passive', 'passive_ad', 'impression'].includes(normalized)) {
     return 'passive_ad';
   }
+  if (['offerwall', 'cpi', 'quiz', 'poll', 'micro_quiz', 'profiler_poll', 'clip_view'].includes(normalized)) return 'offerwall';
   return null;
 }
 
 function dailyWindowStart() {
-  return new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
 }
 
 function calculateLevelBonus(level = 0) {
@@ -133,6 +135,29 @@ function resolveGiftCardTier(points) {
   return GIFT_CARD_TIERS.find((tier) => tier.points === Number(points));
 }
 
+const OFFERWALL_PROVIDERS = [
+  {
+    id: 'timewall',
+    name: 'TimeWall',
+    iframeUrl: process.env.TIMEWALL_IFRAME_URL || '',
+    categories: ['cpi_mobile_launch', 'micro_quiz', 'profiler_poll', 'short_video'],
+  },
+  {
+    id: 'lootably',
+    name: 'Lootably',
+    iframeUrl: process.env.LOOTABLY_IFRAME_URL || '',
+    categories: ['cpi_mobile_launch', 'micro_quiz', 'profiler_poll', 'short_video'],
+  },
+  {
+    id: 'adgate',
+    name: 'AdGate',
+    iframeUrl: process.env.ADGATE_IFRAME_URL || '',
+    categories: ['cpi_mobile_launch', 'micro_quiz', 'profiler_poll', 'short_video'],
+  },
+];
+
+const BLOCKED_OFFERWALL_CATEGORIES = ['cpa', 'paid', 'credit_card', 'purchase', 'high_grind_game'];
+
 async function resolveAuthorizedUserId(req, requestedUserId) {
   const authHeader = req.headers.authorization || '';
   if (authHeader.startsWith('Bearer ')) {
@@ -157,6 +182,13 @@ const limiter = rateLimit({
   keyGenerator: (req) => req.headers['authorization'] || 'global-limit',
 });
 
+const taskCompletionLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 12,
+  keyGenerator: (req) => req.headers.authorization || req.body?.userId || 'task-global-limit',
+  message: { error: 'Too many task completion attempts. Please slow down.' },
+});
+
 app.use(limiter);
 app.use(cors());
 app.use(express.json());
@@ -165,6 +197,25 @@ app.use(express.json());
 app.get('/api/ip', (req, res) => {
   const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
   res.json({ ip });
+});
+
+app.get('/api/offerwalls', async (req, res) => {
+  const userId = req.headers.authorization?.replace('Bearer ', '') || req.query.userId || '';
+  const providers = OFFERWALL_PROVIDERS.map((provider) => ({
+    ...provider,
+    iframeUrl: provider.iframeUrl
+      ? provider.iframeUrl
+          .replace('{user_id}', encodeURIComponent(userId))
+          .replace('{allowed_categories}', encodeURIComponent(provider.categories.join(',')))
+      : '',
+    blockedCategories: BLOCKED_OFFERWALL_CATEGORIES,
+  }));
+
+  res.json({
+    allowedCategories: ['cpi_mobile_launch', 'micro_quiz', 'profiler_poll', 'short_video'],
+    blockedCategories: BLOCKED_OFFERWALL_CATEGORIES,
+    providers,
+  });
 });
 
 // 2. NEW USER REGISTRATION WITH FINGERPRINT VERIFICATION
@@ -176,6 +227,18 @@ app.post('/api/register', async (req, res) => {
   }
 
   const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+  let referrerId = null;
+
+  if (referredBy) {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(referredBy);
+    const query = supabase
+      .from('profiles')
+      .select('id');
+    const { data: referrer } = await (isUuid
+      ? query.eq('id', referredBy).maybeSingle()
+      : query.eq('referral_code', String(referredBy).toUpperCase()).maybeSingle());
+    referrerId = referrer?.id || null;
+  }
 
   // Insert profile info into Supabase. Unique index handle will auto-reject if fingerprint already exists
   const { data, error } = await supabase
@@ -185,7 +248,8 @@ app.post('/api/register', async (req, res) => {
       username: username,
       device_fingerprint: deviceFingerprint,
       last_ip: clientIp,
-      referred_by: referredBy || null
+      referral_code: userId.replaceAll('-', '').slice(0, 10).toUpperCase(),
+      referred_by: referrerId
     })
     .select();
 
@@ -217,8 +281,8 @@ app.get('/api/nonce', async (req, res) => {
 });
 
 // 4. SECURE TASK COMPLETION (Validates hash signature, calls RPC)
-app.post('/api/complete_task', async (req, res) => {
-  const { userId, taskCategory, clientNonce, signature, adPayoutValue } = req.body;
+app.post('/api/complete_task', taskCompletionLimiter, async (req, res) => {
+  const { userId, taskCategory, clientNonce, signature, adPayoutValue, metadata = {} } = req.body;
   if (!userId || !taskCategory) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
@@ -282,6 +346,7 @@ app.post('/api/complete_task', async (req, res) => {
     base_earnings: earnings.baseEarnings,
     bonus_earnings: earnings.bonusEarnings,
     total_earnings: earnings.totalEarnings,
+    completion_metadata: metadata,
   });
 
   if (error) {
@@ -292,8 +357,6 @@ app.post('/api/complete_task', async (req, res) => {
     return res.status(429).json(data);
   }
 
-  await creditReferralCommission(auth.userId, earnings.baseEarnings);
-
   res.json({
     ...data,
     taskCategory: normalizedTaskCategory,
@@ -301,6 +364,72 @@ app.post('/api/complete_task', async (req, res) => {
     dailyCap,
     earnings,
   });
+});
+
+app.post('/api/offerwall/postback', taskCompletionLimiter, async (req, res) => {
+  const { userId, provider, category, adPayoutValue, transactionId } = req.body;
+  if (!userId || !provider || !category || !transactionId) {
+    return res.status(400).json({ error: 'Missing offerwall postback fields.' });
+  }
+
+  const normalizedCategory = String(category).toLowerCase().trim();
+  if (BLOCKED_OFFERWALL_CATEGORIES.includes(normalizedCategory)) {
+    return res.status(403).json({ error: 'Offer category is not allowed.' });
+  }
+
+  const allowedCategories = ['cpi_mobile_launch', 'micro_quiz', 'profiler_poll', 'short_video'];
+  if (!allowedCategories.includes(normalizedCategory)) {
+    return res.status(403).json({ error: 'Unsupported offerwall category.' });
+  }
+
+  const payoutValue = Number(adPayoutValue || DEFAULT_AD_PAYOUT_VALUES.offerwall);
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('id', userId)
+    .single();
+
+  if (profileError || !profile) {
+    return res.status(500).json({ error: 'User profile look up failed.' });
+  }
+
+  const existing = await supabase
+    .from('offerwall_events')
+    .select('id')
+    .eq('provider', provider)
+    .eq('transaction_id', transactionId)
+    .maybeSingle();
+
+  if (existing.data) {
+    return res.json({ success: true, duplicate: true });
+  }
+
+  const earnings = calculateTaskEarnings(payoutValue, profile.level);
+  const { data, error } = await supabase.rpc('complete_user_task_secure', {
+    target_user_id: userId,
+    task_category: 'offerwall',
+    provided_signature: 'session',
+    client_nonce: `offerwall:${provider}:${transactionId}`,
+    base_earnings: earnings.baseEarnings,
+    bonus_earnings: earnings.bonusEarnings,
+    total_earnings: earnings.totalEarnings,
+    completion_metadata: { provider, category: normalizedCategory, transactionId },
+  });
+
+  if (error) {
+    return res.status(500).json({ error: error.message });
+  }
+
+  await supabase.from('offerwall_events').insert({
+    user_id: userId,
+    provider,
+    category: normalizedCategory,
+    transaction_id: transactionId,
+    ad_payout_value: payoutValue,
+    credited_points: earnings.totalEarnings,
+  });
+
+  res.json({ ...data, earnings });
 });
 
 // 5. SECURE WITHDRAWAL PROCESSING (Gift card tiers only)
@@ -323,50 +452,42 @@ app.post('/api/withdraw', async (req, res) => {
     return res.status(400).json({ error: 'Invalid gift card tier selected.' });
   }
 
-  // Fetch current user balance securely to confirm eligibility before inserting row
-  const { data: profile, error: profileErr } = await supabase
-    .from('profiles')
-    .select('robux_balance')
-    .eq('id', auth.userId)
-    .single();
-
-  if (profileErr || !profile) {
-    return res.status(500).json({ error: 'User profile look up failed.' });
-  }
-
-  if (profile.robux_balance < MIN_GIFT_CARD_POINTS) {
-    return res.status(400).json({ error: 'Gift Card redemption requires at least 400 points.' });
-  }
-
-  if (profile.robux_balance < selectedTier.points) {
-    return res.status(400).json({ error: 'Insufficient points for selected Gift Card tier.' });
-  }
-
-  // Deduct from balance immediately on cashout request (Prevents double spending)
-  await supabase
-    .from('profiles')
-    .update({ robux_balance: profile.robux_balance - selectedTier.points })
-    .eq('id', auth.userId);
-
-  const { data, error } = await supabase
-    .from('withdrawals')
-    .insert({
-      user_id: auth.userId,
-      requested_amount: selectedTier.points,
-      payout_type: 'gift_card',
-      gift_card_robux: selectedTier.robux,
-      gift_card_value_usd: selectedTier.cashValue,
-      status: 'pending'
-    })
-    .select();
+  const { data, error } = await supabase.rpc('redeem_gift_card', {
+    target_user_id: auth.userId,
+    tier_points: selectedTier.points,
+  });
 
   if (error) {
-    // Refund user balance if request insertion crashes
-    await supabase.from('profiles').update({ robux_balance: profile.robux_balance }).eq('id', auth.userId);
     return res.status(500).json({ error: error.message });
   }
 
-  res.json({ success: true, message: 'Cashout request added to execution pipeline.', deployment: data[0] });
+  if (data?.success === false) {
+    return res.status(400).json(data);
+  }
+
+  res.json({ success: true, message: 'Gift Card redeemed.', deployment: data });
+});
+
+app.get('/api/withdrawals', async (req, res) => {
+  const auth = await resolveAuthorizedUserId(req, req.query.userId);
+  if (auth.error) {
+    return res.status(auth.error.status).json({ error: auth.error.message });
+  }
+  if (!auth.signedSession) {
+    return res.status(401).json({ error: 'Authenticated session required.' });
+  }
+
+  const { data, error } = await supabase
+    .from('withdrawals')
+    .select('id, requested_amount, gift_card_robux, gift_card_value_usd, status, ecard_pin, claimed_at, created_at')
+    .eq('user_id', auth.userId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    return res.status(500).json({ error: error.message });
+  }
+
+  res.json({ withdrawals: data || [] });
 });
 
 // 6. REFERRAL EARNINGS CLAIM ENDPOINT

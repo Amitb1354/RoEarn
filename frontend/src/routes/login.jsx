@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { RoEarnLogo } from "@/components/RoEarnLogo";
 import { ArrowRight, Lock, Mail } from "lucide-react";
 import { supabase, isSupabaseConfigured } from "@/utils/auth";
@@ -61,6 +61,17 @@ function LoginPage() {
   const [error, setError] = useState(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
+  useEffect(() => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if ((event === "SIGNED_IN" || event === "TOKEN_REFRESHED") && session?.user) {
+        localStorage.setItem("device_account_bound", session.user.id);
+        navigate({ to: "/dashboard" });
+      }
+    });
+
+    return () => listener.subscription.unsubscribe();
+  }, [navigate]);
 
   const submit = async (e) => {
     e.preventDefault();

@@ -9,7 +9,12 @@ export const DAILY_CAPS = {
 export const DAILY_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export function getDailyWindowStartIso() {
-  return new Date(Date.now() - DAILY_WINDOW_MS).toISOString();
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
+}
+
+export function getUtcDayKey() {
+  return getDailyWindowStartIso().slice(0, 10);
 }
 
 export async function getCurrentUserId() {
@@ -56,7 +61,48 @@ export async function fetchUserBalance(userId) {
   return Number(data?.robux_balance || 0);
 }
 
-export async function completeTask(taskCategory, adPayoutValue) {
+export async function fetchUserProfile(userId) {
+  if (!isSupabaseConfigured || !userId) return null;
+
+  const { data } = await supabase
+    .from("profiles")
+    .select("username, robux_balance, referral_code, referred_by")
+    .eq("id", userId)
+    .single();
+
+  return data || null;
+}
+
+export async function fetchReferralStats(userId) {
+  if (!isSupabaseConfigured || !userId) {
+    return { referralCode: "", referredUsers: 0, passivePointsEarned: 0 };
+  }
+
+  const { data } = await supabase.rpc("get_referral_stats", { target_user_id: userId });
+  return {
+    referralCode: data?.referralCode || "",
+    referredUsers: Number(data?.referredUsers || 0),
+    passivePointsEarned: Number(data?.passivePointsEarned || 0),
+  };
+}
+
+export async function fetchWithdrawalHistory(userId) {
+  if (!isSupabaseConfigured || !userId) return [];
+
+  const accessToken = await getAccessToken();
+  if (!accessToken) return [];
+
+  const response = await fetch(`/api/withdrawals?userId=${encodeURIComponent(userId)}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) return [];
+
+  const data = await response.json();
+  return data.withdrawals || [];
+}
+
+export async function completeTask(taskCategory, adPayoutValue, metadata = {}) {
   const [userId, accessToken] = await Promise.all([getCurrentUserId(), getAccessToken()]);
   if (!userId || !accessToken) {
     throw new Error("Please sign in before completing tasks.");
@@ -68,7 +114,7 @@ export async function completeTask(taskCategory, adPayoutValue) {
       "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken}`,
     },
-    body: JSON.stringify({ userId, taskCategory, adPayoutValue }),
+    body: JSON.stringify({ userId, taskCategory, adPayoutValue, metadata }),
   });
 
   const payload = await response.json();
@@ -81,10 +127,10 @@ export async function completeTask(taskCategory, adPayoutValue) {
 
 export function readDailyLocalSet(key) {
   if (typeof window === "undefined") return new Set();
-  const fallback = { startedAt: Date.now(), ids: [] };
+  const fallback = { dayKey: getUtcDayKey(), ids: [] };
   try {
     const parsed = JSON.parse(localStorage.getItem(key) || "null") || fallback;
-    if (!parsed.startedAt || Date.now() - parsed.startedAt >= DAILY_WINDOW_MS) {
+    if (parsed.dayKey !== getUtcDayKey()) {
       localStorage.setItem(key, JSON.stringify(fallback));
       return new Set();
     }
@@ -96,5 +142,5 @@ export function readDailyLocalSet(key) {
 
 export function writeDailyLocalSet(key, set) {
   if (typeof window === "undefined") return;
-  localStorage.setItem(key, JSON.stringify({ startedAt: Date.now(), ids: Array.from(set) }));
+  localStorage.setItem(key, JSON.stringify({ dayKey: getUtcDayKey(), ids: Array.from(set) }));
 }

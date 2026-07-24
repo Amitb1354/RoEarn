@@ -330,6 +330,10 @@ export function AppLayout({ children }) {
           <AdSlot label="300×250 Mobile Banner" epoch={adEpoch} className="h-[250px] w-[300px]" />
         </div>
 
+        <footer className="px-4 pb-4 text-center text-[10px] text-muted-foreground sm:px-6 lg:px-10">
+          Roearn is an independent rewards platform and is not affiliated with, sponsored by, or endorsed by Roblox Corporation. Roblox and Robux are registered trademarks of Roblox Corporation.
+        </footer>
+
         {/* Bottom spacer so content isn't hidden behind fixed bottom banner */}
         <div className="h-[80px]" />
       </main>
