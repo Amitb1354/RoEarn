@@ -1,22 +1,51 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, Image as ImageIcon, Sparkles } from "lucide-react";
+import { completeTask, readDailyLocalSet, writeDailyLocalSet } from "@/utils/roearnData";
 
 export const Route = createFileRoute("/ptc")({
   head: () => ({ meta: [{ title: "PTC Board — RoEarn" }] }),
   component: PTCBoard,
 });
 
-const PREMIUM = 20;
-const STANDARD = 40;
-const TOTAL = PREMIUM + STANDARD;
+const SHORTLINK_DAILY_CAP = 20;
+const PTC_DAILY_CAP = 40;
+const TOTAL = SHORTLINK_DAILY_CAP + PTC_DAILY_CAP;
 
 function PTCBoard() {
   const [completed, setCompleted] = useState(new Set());
+  const [pending, setPending] = useState(new Set());
   const remaining = TOTAL - completed.size;
 
-  const claim = (i) => setCompleted((p) => new Set(p).add(i));
+  useEffect(() => {
+    setCompleted(readDailyLocalSet("roearn-ptc-completed"));
+  }, []);
+
+  const claim = async (i, premium) => {
+    if (completed.has(i) || pending.has(i)) return;
+
+    setPending((previous) => new Set(previous).add(i));
+    const taskCategory = premium ? "shortlink" : "ptc";
+    const adPayoutValue = premium ? 0.5 : 0.3;
+
+    try {
+      await completeTask(taskCategory, adPayoutValue);
+      setCompleted((previous) => {
+        const next = new Set(previous).add(i);
+        writeDailyLocalSet("roearn-ptc-completed", next);
+        return next;
+      });
+    } catch (error) {
+      console.warn("Unable to complete task", error);
+    } finally {
+      setPending((previous) => {
+        const next = new Set(previous);
+        next.delete(i);
+        return next;
+      });
+    }
+  };
 
   const renderCard = (i, premium) => {
     const done = completed.has(i);
@@ -27,8 +56,8 @@ function PTCBoard() {
         whileHover={{ scale: done ? 1 : 1.05, y: done ? 0 : -2 }}
         whileTap={{ scale: 0.97 }}
         transition={{ type: "spring", stiffness: 400, damping: 22 }}
-        onClick={() => !done && claim(i)}
-        disabled={done}
+        onClick={() => !done && claim(i, premium)}
+        disabled={done || pending.has(i)}
         className={`group relative flex aspect-square flex-col items-center justify-center gap-2 rounded-xl border p-2 text-xs transition-colors ${
           done
             ? "border-accent/30 bg-accent/5 opacity-60"
@@ -54,7 +83,7 @@ function PTCBoard() {
           </div>
         )}
         <div className="font-medium text-foreground/80">
-          {premium ? "Premium Link" : "Ad"} #{i + 1}
+          {premium ? "Premium Link" : "Ad"} #{premium ? i + 1 : i - SHORTLINK_DAILY_CAP + 1}
         </div>
         <div
           className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
@@ -97,7 +126,7 @@ function PTCBoard() {
           <span className="ml-auto text-xs text-muted-foreground">High-CPM shortlink network</span>
         </div>
         <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-          {Array.from({ length: PREMIUM }).map((_, i) => renderCard(i, true))}
+          {Array.from({ length: SHORTLINK_DAILY_CAP }).map((_, i) => renderCard(i, true))}
         </div>
       </section>
 
@@ -109,7 +138,7 @@ function PTCBoard() {
           <span className="ml-auto text-xs text-muted-foreground">Programmatic banner slots</span>
         </div>
         <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-          {Array.from({ length: STANDARD }).map((_, i) => renderCard(PREMIUM + i, false))}
+          {Array.from({ length: PTC_DAILY_CAP }).map((_, i) => renderCard(SHORTLINK_DAILY_CAP + i, false))}
         </div>
       </section>
     </div>

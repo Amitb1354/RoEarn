@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { HelpCircle, Shield, Sparkles } from "lucide-react";
 import { RobuxIcon } from "@/components/RobuxIcon";
+import { isSupabaseConfigured, supabase } from "@/utils/auth";
 
 export const Route = createFileRoute("/withdraw")({
   head: () => ({ meta: [{ title: "Withdraw — RoEarn" }] }),
@@ -10,13 +11,75 @@ export const Route = createFileRoute("/withdraw")({
 });
 
 function Withdraw() {
-  const [assetId, setAssetId] = useState("");
-  const [amount, setAmount] = useState("50");
+  const giftCardTiers = [
+    { robux: 400, cashValue: "$5.00", points: 400 },
+    { robux: 800, cashValue: "$10.00", points: 800 },
+    { robux: 1200, cashValue: "$15.00", points: 1200 },
+    { robux: 2000, cashValue: "$25.00", points: 2000 },
+  ];
+  const [tierPoints, setTierPoints] = useState("400");
+  const [currentUserPoints, setCurrentUserPoints] = useState(0);
+  const [userId, setUserId] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [notice, setNotice] = useState(null);
 
-  const mockBalance = 120.5;
-  const numAmount = Number(amount) || 0;
-  const listingPrice = numAmount;
-  const valid = numAmount >= 50 && numAmount <= mockBalance && assetId.trim().length > 0;
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadBalance() {
+      if (!isSupabaseConfigured) return;
+      const { data: authData } = await supabase.auth.getUser();
+      const authUserId = authData?.user?.id;
+      if (!authUserId) return;
+      if (mounted) setUserId(authUserId);
+
+      const { data } = await supabase
+        .from("profiles")
+        .select("robux_balance")
+        .eq("id", authUserId)
+        .single();
+
+      if (mounted && data) {
+        setCurrentUserPoints(Number(data.robux_balance || 0));
+      }
+    }
+
+    loadBalance();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const selectedTier = giftCardTiers.find((tier) => tier.points === Number(tierPoints)) || giftCardTiers[0];
+  const cashoutProgress = Math.min((currentUserPoints / 400) * 100, 100);
+  const valid = currentUserPoints >= 400 && currentUserPoints >= selectedTier.points && Boolean(userId);
+
+  const requestGiftCardPayout = async () => {
+    if (!valid || submitting) return;
+    setSubmitting(true);
+    setNotice(null);
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      const response = await fetch("/api/withdraw", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify({ userId, tierPoints: selectedTier.points }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "Gift Card redemption failed.");
+      setCurrentUserPoints((points) => points - selectedTier.points);
+      setNotice("Gift Card payout request submitted.");
+    } catch (error) {
+      setNotice(error.message || "Gift Card redemption failed.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className="space-y-8">
@@ -25,7 +88,7 @@ function Withdraw() {
           Instant Robux Payout Portal
         </h1>
         <p className="mt-2 text-muted-foreground">
-          Payouts process in under 60 seconds via Roblox Gamepass purchase.
+          Payouts process as fixed Roblox Gift Card redemptions.
         </p>
       </header>
 
@@ -40,35 +103,40 @@ function Withdraw() {
           <div className="space-y-6">
             <div>
               <label className="mb-2 flex items-center gap-2 text-sm font-medium">
-                Roblox Gamepass Asset ID
+                Gift Card Redemption Tier
                 <button className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-white/10">
                   <HelpCircle className="h-3 w-3" /> Help
                 </button>
               </label>
-              <input
-                value={assetId}
-                onChange={(e) => setAssetId(e.target.value)}
-                placeholder="e.g. 12938482937"
+              <select
+                value={tierPoints}
+                onChange={(e) => setTierPoints(e.target.value)}
                 className="w-full rounded-lg border border-white/10 bg-slate-950/60 px-4 py-3 font-mono text-lg tracking-wider text-accent outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/30"
-              />
+              >
+                {giftCardTiers.map((tier) => (
+                  <option key={tier.points} value={tier.points}>
+                    {tier.robux.toLocaleString()} Robux Gift Card - {tier.cashValue} / {tier.points} Points
+                  </option>
+                ))}
+              </select>
 
               <p className="mt-2 text-xs text-muted-foreground">
-                Do not enter your password, only your active Gamepass Asset ID.
+                Gift Card redemptions unlock once your account reaches 400 points.
               </p>
             </div>
 
             <div>
               <label className="mb-2 block flex items-center justify-between text-sm font-medium">
-                <span>Robux to Cashout (Min 50)</span>
-                <span className="text-muted-foreground text-xs">Balance: <span className="text-accent font-bold">{mockBalance.toFixed(2)} R$</span></span>
+                <span>Points to Cashout (Min 400)</span>
+                <span className="text-muted-foreground text-xs">Balance: <span className="text-accent font-bold">{currentUserPoints.toFixed(2)} Points</span></span>
               </label>
               <div className="relative">
                 <input
                   type="number"
-                  min={50}
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="50"
+                  min={400}
+                  value={selectedTier.points}
+                  readOnly
+                  placeholder="400"
                   className="w-full rounded-lg border border-white/10 bg-slate-950/60 px-4 py-3 pr-12 text-lg font-semibold outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/30"
                 />
 
@@ -76,28 +144,28 @@ function Withdraw() {
                   <RobuxIcon size={24} />
                 </div>
               </div>
-              {numAmount > mockBalance && (
+              {!valid && (
                 <p className="mt-2 text-xs text-red-400">
-                  You do not have enough Robux in your balance.
+                  You need at least 400 points before claiming a Gift Card.
                 </p>
               )}
             </div>
 
             <motion.div
-              key={listingPrice}
+              key={selectedTier.points}
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               className="rounded-xl border border-primary/30 bg-primary/5 p-5 text-center"
             >
               <div className="text-xs uppercase tracking-wider text-muted-foreground">
-                Set Gamepass Listing Price to
+                Selected Gift Card Tier
               </div>
               <div className="mt-1 flex items-center justify-center gap-2 text-4xl font-bold text-gradient-indigo">
-                {listingPrice}{" "}
+                {selectedTier.robux.toLocaleString()}{" "}
                 <span className="text-2xl text-muted-foreground font-medium">Robux</span>
               </div>
               <div className="mt-2 text-xs text-muted-foreground">
-                We will purchase your Gamepass for {listingPrice} Robux. Note that Roblox will apply their standard 30% Creator Tax.
+                Costs {selectedTier.points.toLocaleString()} points for a {selectedTier.cashValue} value.
               </div>
             </motion.div>
 
@@ -105,13 +173,15 @@ function Withdraw() {
               whileHover={{ scale: valid ? 1.01 : 1 }}
               whileTap={{ scale: valid ? 0.99 : 1 }}
               disabled={!valid}
+              onClick={requestGiftCardPayout}
               className="relative w-full overflow-hidden rounded-xl bg-gradient-to-r from-accent to-emerald-400 px-6 py-4 text-base font-bold tracking-wide text-slate-950 shadow-[0_0_30px] shadow-accent/40 transition-opacity disabled:opacity-40 disabled:shadow-none"
             >
               <span className="relative z-10 flex items-center justify-center gap-2">
                 <Sparkles className="h-5 w-5" />
-                REQUEST ROBUX PAYOUT
+                {submitting ? "REQUESTING GIFT CARD PAYOUT" : "REQUEST GIFT CARD PAYOUT"}
               </span>
             </motion.button>
+            {notice && <p className="text-center text-xs text-muted-foreground">{notice}</p>}
           </div>
         </motion.div>
 
@@ -128,11 +198,11 @@ function Withdraw() {
             <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/5">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-accent to-emerald-300"
-                style={{ width: "100%" }}
+                style={{ width: `${cashoutProgress}%` }}
               />
             </div>
             <div className="mt-2 text-xs text-muted-foreground">
-              120,000 / 120,000 R$ remaining for today
+              {Math.min(currentUserPoints, 400).toFixed(2)} / 400 Points toward first Gift Card
             </div>
           </motion.div>
 

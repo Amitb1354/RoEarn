@@ -16,6 +16,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { RoEarnLogo } from "./RoEarnLogo";
 import { AdSlot } from "./AdSlot";
 import { cn } from "@/lib/utils";
+import { completeTask } from "@/utils/roearnData";
 
 export const AdEpochContext = createContext(0);
 
@@ -30,6 +31,87 @@ const nav = [
 
 // Routes that render WITHOUT the app chrome (sidebar + top bar).
 const PUBLIC_ROUTES = ["/", "/login", "/register"];
+const PASSIVE_AD_DAILY_CAP = 30;
+const POPUNDER_DAILY_CAP = 2;
+const DAILY_CAP_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+function readWindowedCounter(key) {
+  if (typeof window === "undefined") return { count: 0, startedAt: Date.now() };
+  const now = Date.now();
+  const fallback = { count: 0, startedAt: now };
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || "null") || fallback;
+    if (!parsed.startedAt || now - parsed.startedAt >= DAILY_CAP_WINDOW_MS) return fallback;
+    return parsed;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeWindowedCounter(key, counter) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(key, JSON.stringify(counter));
+}
+
+function incrementWindowedCounter(key, max) {
+  const counter = readWindowedCounter(key);
+  if (counter.count >= max) return { ...counter, capped: true, didIncrement: false };
+  const next = {
+    ...counter,
+    count: counter.count + 1,
+    capped: counter.count + 1 >= max,
+    didIncrement: true,
+  };
+  writeWindowedCounter(key, next);
+  return next;
+}
+
+function incrementSessionCounter(key, max) {
+  if (typeof window === "undefined") return { count: 0, capped: false, didIncrement: false };
+  const count = Number(sessionStorage.getItem(key) || 0);
+  if (count >= max) return { count, capped: true, didIncrement: false };
+  const next = count + 1;
+  sessionStorage.setItem(key, String(next));
+  return { count: next, capped: next >= max, didIncrement: true };
+}
+
+function readCookieCounter(key) {
+  if (typeof document === "undefined") return { count: 0, startedAt: Date.now() };
+  const now = Date.now();
+  const fallback = { count: 0, startedAt: now };
+  const cookie = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith(`${key}=`))
+    ?.split("=")[1];
+
+  if (!cookie) return fallback;
+
+  try {
+    const parsed = JSON.parse(decodeURIComponent(cookie));
+    if (!parsed.startedAt || now - parsed.startedAt >= DAILY_CAP_WINDOW_MS) return fallback;
+    return parsed;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeCookieCounter(key, counter) {
+  if (typeof document === "undefined") return;
+  document.cookie = `${key}=${encodeURIComponent(JSON.stringify(counter))}; max-age=86400; path=/; SameSite=Lax`;
+}
+
+function incrementCookieCounter(key, max) {
+  const counter = readCookieCounter(key);
+  if (counter.count >= max) return { ...counter, capped: true, didIncrement: false };
+  const next = {
+    ...counter,
+    count: counter.count + 1,
+    capped: counter.count + 1 >= max,
+    didIncrement: true,
+  };
+  writeCookieCounter(key, next);
+  return next;
+}
 
 function SidebarContent({ onNavigate }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -100,7 +182,14 @@ export function AppLayout({ children }) {
   // 45-second ad refresh cycle
   useEffect(() => {
     if (isPublic) return;
+    const initialImpression = incrementWindowedCounter("roearn-passive-ad-impressions", PASSIVE_AD_DAILY_CAP);
+    if (initialImpression.didIncrement) {
+      completeTask("passive_ad", 0.1).catch(() => {});
+    }
     const interval = setInterval(() => {
+      const impressions = incrementWindowedCounter("roearn-passive-ad-impressions", PASSIVE_AD_DAILY_CAP);
+      if (!impressions.didIncrement) return;
+      completeTask("passive_ad", 0.1).catch(() => {});
       setAdEpoch((e) => e + 1);
     }, 45000);
     return () => clearInterval(interval);
@@ -120,6 +209,10 @@ export function AppLayout({ children }) {
     if (isPublic) return;
     if (prevPath.current === pathname) return;
     prevPath.current = pathname;
+    const sessionPopunders = incrementSessionCounter("roearn-session-popunder-triggers", POPUNDER_DAILY_CAP);
+    if (!sessionPopunders.didIncrement) return;
+    const cookiePopunders = incrementCookieCounter("roearn_popunder_triggers", POPUNDER_DAILY_CAP);
+    if (!cookiePopunders.didIncrement) return;
     setInterstitial(true);
     const t = setTimeout(() => setInterstitial(false), 1000);
     return () => clearTimeout(t);

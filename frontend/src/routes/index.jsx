@@ -21,12 +21,12 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "The premium rewards dashboard for Roblox. Complete PTC ads, watch videos and cash out instantly via Gamepass. Trusted by 120k+ players.",
+          "The premium rewards dashboard for Roblox. Complete PTC ads, watch videos and cash out through fixed Gift Card tiers. Trusted by 120k+ players.",
       },
       { property: "og:title", content: "RoEarn — Earn Free Robux Daily" },
       {
         property: "og:description",
-        content: "PTC ads, videos, offerwalls and instant Gamepass payouts.",
+        content: "PTC ads, videos, offerwalls and fixed Gift Card payouts.",
       },
     ],
   }),
@@ -37,7 +37,7 @@ const features = [
   {
     icon: MousePointerClick,
     title: "PTC Ad Board",
-    body: "50+ high-payout paid-to-click slots refreshed every 24h. Earn while you scroll.",
+    body: "40 high-payout paid-to-click slots refreshed every 24h. Earn while you scroll.",
     tint: "from-indigo-500/20 to-transparent",
   },
   {
@@ -48,8 +48,8 @@ const features = [
   },
   {
     icon: Wallet,
-    title: "Instant Gamepass Payouts",
-    body: "Cash out any time. Withdraw directly to your Roblox account instantly via Gamepass.",
+    title: "Gift Card Payouts",
+    body: "Cash out at fixed Robux Gift Card tiers once your points reach the minimum threshold.",
     tint: "from-fuchsia-500/20 to-transparent",
   },
   {
@@ -61,9 +61,10 @@ const features = [
 ];
 
 const tiers = [
-  { label: "Starter", amount: 50, sub: "Warm-up pack" },
-  { label: "Grinder", amount: 350, sub: "Most popular", popular: true },
-  { label: "Whale", amount: 800, sub: "Diamond tier" },
+  { label: "Starter", amount: 400, sub: "$5.00 Gift Card" },
+  { label: "Grinder", amount: 800, sub: "$10.00 Gift Card", popular: true },
+  { label: "Whale", amount: 1200, sub: "$15.00 Gift Card" },
+  { label: "Legend", amount: 2000, sub: "$25.00 Gift Card" },
 ];
 
 function Landing() {
@@ -138,8 +139,8 @@ function Landing() {
           transition={{ delay: 0.2 }}
           className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground"
         >
-          Click, watch, complete — and cash out. RoEarn turns your downtime into Gamepass-ready
-          Robux with instant payouts and airtight protection.
+          Click, watch, complete — and cash out. RoEarn turns your downtime into Gift Card-ready
+          Robux with fixed tiers and airtight protection.
         </motion.p>
 
         <motion.div
@@ -222,14 +223,14 @@ function Landing() {
           <div className="relative grid gap-10 lg:grid-cols-2 lg:items-center">
             <div>
               <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-                <Zap className="h-3.5 w-3.5" /> Instant Gamepass Payouts
+                <Zap className="h-3.5 w-3.5" /> Gift Card Payouts
               </div>
               <h2 className="mt-4 text-3xl font-bold tracking-tight sm:text-4xl">
                 Cash out from as little as{" "}
-                <RobuxPrice amount={50} size={26} className="text-accent" />
+                <RobuxPrice amount={400} size={26} className="text-accent" />
               </h2>
               <p className="mt-4 max-w-md text-muted-foreground">
-                Withdraw directly to your Roblox account instantly via Gamepass. Fast, secure, and reliable payouts.
+                Redeem fixed Robux Gift Card tiers when your account reaches 400 points.
               </p>
               <Link
                 to="/register"
@@ -312,11 +313,11 @@ function Landing() {
       <section className="relative z-10 mx-auto max-w-4xl px-6 pb-24 text-center">
         <div className="glass-card p-10 glow-indigo">
           <h3 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            Your Gamepass is one click away.
+            Your Gift Card is one click away.
           </h3>
           <p className="mt-3 text-muted-foreground">
             Free forever. No credit card. Cash out from{" "}
-            <RobuxPrice amount={50} size={18} className="text-accent" />.
+            <RobuxPrice amount={400} size={18} className="text-accent" />.
           </p>
           <Link
             to="/register"

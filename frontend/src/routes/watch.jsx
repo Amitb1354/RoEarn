@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { useEffect, useState } from "react";
 import { Play, Check, Bell, X } from "lucide-react";
 import { RobuxIcon } from "@/components/RobuxIcon";
+import { completeTask, readDailyLocalSet, writeDailyLocalSet } from "@/utils/roearnData";
 
 export const Route = createFileRoute("/watch")({
   head: () => ({ meta: [{ title: "Watch to Earn — RoEarn" }] }),
@@ -11,12 +12,36 @@ export const Route = createFileRoute("/watch")({
 
 function WatchToEarn() {
   const [watched, setWatched] = useState(new Set());
+  const [pending, setPending] = useState(new Set());
   const [toast, setToast] = useState(true);
 
   useEffect(() => {
+    setWatched(readDailyLocalSet("roearn-video-completed"));
     const t = setTimeout(() => setToast(false), 8000);
     return () => clearTimeout(t);
   }, []);
+
+  const claimVideo = async (i) => {
+    if (watched.has(i) || pending.has(i)) return;
+
+    setPending((previous) => new Set(previous).add(i));
+    try {
+      await completeTask("passive_ad", 0.1);
+      setWatched((previous) => {
+        const next = new Set(previous).add(i);
+        writeDailyLocalSet("roearn-video-completed", next);
+        return next;
+      });
+    } catch (error) {
+      console.warn("Unable to complete video placement", error);
+    } finally {
+      setPending((previous) => {
+        const next = new Set(previous);
+        next.delete(i);
+        return next;
+      });
+    }
+  };
 
   return (
     <div className="relative">
@@ -44,8 +69,8 @@ function WatchToEarn() {
                   key={i}
                   whileHover={{ scale: done ? 1 : 1.04, y: done ? 0 : -3 }}
                   whileTap={{ scale: 0.97 }}
-                  onClick={() => !done && setWatched(new Set([...watched, i]))}
-                  disabled={done}
+                  onClick={() => claimVideo(i)}
+                  disabled={done || pending.has(i)}
                   className={`group relative overflow-hidden rounded-xl border ${done ? "border-accent/40 opacity-70" : "border-white/10 hover:border-primary/50"
                     }`}
                 >

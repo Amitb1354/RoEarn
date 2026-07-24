@@ -2,9 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { RobuxIcon } from "@/components/RobuxIcon";
 import { CheckCircle2, TrendingUp, Zap, Trophy, Crown, Sparkles } from "lucide-react";
-import { useContext } from "react";
+import { useContext, useEffect, useState } from "react";
 import { AdEpochContext } from "@/components/AppLayout";
 import { AdSlot } from "@/components/AdSlot";
+import { fetchDailyCompletionCounts, fetchUserBalance, getCurrentUserId } from "@/utils/roearnData";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
@@ -90,10 +91,38 @@ const leaders = [
 ];
 
 function Dashboard() {
-  const completed = 0;
-  const balance = 0;
+  const [dailyCounts, setDailyCounts] = useState({ ptc: 0, shortlink: 0, passive_ad: 0 });
+  const [balance, setBalance] = useState(0);
+  const ptcCompleted = dailyCounts.ptc;
+  const shortlinkCompleted = dailyCounts.shortlink;
+  const passiveAdImpressions = dailyCounts.passive_ad;
+  const completed = ptcCompleted + shortlinkCompleted + passiveAdImpressions;
+  const totalDailyTaskCap = 40 + 20 + 30;
   const claimed = 0;
   const adEpoch = useContext(AdEpochContext);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadDashboardState() {
+      const userId = await getCurrentUserId();
+      if (!userId) return;
+
+      const [counts, userBalance] = await Promise.all([
+        fetchDailyCompletionCounts(userId),
+        fetchUserBalance(userId),
+      ]);
+
+      if (!mounted) return;
+      setDailyCounts(counts);
+      setBalance(userBalance);
+    }
+
+    loadDashboardState();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   return (
     <div className="space-y-8">
@@ -120,17 +149,23 @@ function Dashboard() {
             </span>
           </div>
           <div className="mt-6 flex flex-col items-center gap-8 sm:flex-row">
-            <Ring value={completed} max={90} />
+            <Ring value={completed} max={totalDailyTaskCap} />
             <div className="flex-1 space-y-5 w-full">
               <Bar
                 label="PTC Ads"
-                value={0}
-                max={60}
+                value={ptcCompleted}
+                max={40}
                 color="linear-gradient(90deg, #6366F1, #8b5cf6)"
               />
               <Bar
-                label="Videos"
-                value={0}
+                label="Shortlinks"
+                value={shortlinkCompleted}
+                max={20}
+                color="linear-gradient(90deg, #10B981, #34d399)"
+              />
+              <Bar
+                label="Banner/Video Ads"
+                value={passiveAdImpressions}
                 max={30}
                 color="linear-gradient(90deg, #10B981, #34d399)"
               />
