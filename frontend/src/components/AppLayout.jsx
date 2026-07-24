@@ -1,4 +1,4 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard,
   MousePointerClick,
@@ -17,6 +17,7 @@ import { RoEarnLogo } from "./RoEarnLogo";
 import { AdSlot } from "./AdSlot";
 import { cn } from "@/lib/utils";
 import { completeTask } from "@/utils/roearnData";
+import { isSupabaseConfigured, supabase } from "@/utils/auth";
 
 export const AdEpochContext = createContext(0);
 
@@ -113,7 +114,7 @@ function incrementCookieCounter(key, max) {
   return next;
 }
 
-function SidebarContent({ onNavigate }) {
+function SidebarContent({ onNavigate, onLogout }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   return (
     <div className="flex h-full flex-col p-5">
@@ -159,7 +160,11 @@ function SidebarContent({ onNavigate }) {
       </nav>
       <Link
         to="/"
-        onClick={onNavigate}
+        onClick={(event) => {
+          event.preventDefault();
+          onLogout?.();
+          onNavigate?.();
+        }}
         className="mt-auto flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
       >
         <LogOut className="h-4 w-4" />
@@ -171,13 +176,68 @@ function SidebarContent({ onNavigate }) {
 
 export function AppLayout({ children }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [adblockOpen, setAdblockOpen] = useState(false);
   const [interstitial, setInterstitial] = useState(false);
   const [adEpoch, setAdEpoch] = useState(0);
+  const [authReady, setAuthReady] = useState(false);
+  const [authenticated, setAuthenticated] = useState(false);
   const prevPath = useRef(pathname);
 
   const isPublic = PUBLIC_ROUTES.includes(pathname);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function checkSession() {
+      if (!isSupabaseConfigured) {
+        if (mounted) {
+          setAuthenticated(false);
+          setAuthReady(true);
+        }
+        return;
+      }
+
+      const { data } = await supabase.auth.getSession();
+      if (!mounted) return;
+
+      const hasSession = Boolean(data?.session?.user);
+      setAuthenticated(hasSession);
+      setAuthReady(true);
+
+      if (!hasSession && !isPublic) {
+        navigate({ to: "/login", replace: true });
+      }
+    }
+
+    checkSession();
+
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mounted) return;
+      const hasSession = Boolean(session?.user);
+      setAuthenticated(hasSession);
+      setAuthReady(true);
+      if (!hasSession && !PUBLIC_ROUTES.includes(window.location.pathname)) {
+        navigate({ to: "/login", replace: true });
+      }
+    });
+
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, [isPublic, navigate]);
+
+  const logout = async () => {
+    localStorage.removeItem("device_account_bound");
+    sessionStorage.clear();
+    if (isSupabaseConfigured) {
+      await supabase.auth.signOut();
+    }
+    setAuthenticated(false);
+    navigate({ to: "/", replace: true });
+  };
 
   // 45-second ad refresh cycle
   useEffect(() => {
@@ -236,10 +296,18 @@ export function AppLayout({ children }) {
     );
   }
 
+  if (!authReady || !authenticated) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-slate-950">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen">
       <aside className="fixed inset-y-0 left-0 md:left-[170px] z-30 hidden w-64 border-r border-border/60 bg-slate-950/60 backdrop-blur-xl lg:block">
-        <SidebarContent />
+        <SidebarContent onLogout={logout} />
       </aside>
 
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border/60 bg-slate-950/70 px-4 py-3 backdrop-blur-xl lg:hidden">
@@ -283,7 +351,7 @@ export function AppLayout({ children }) {
               >
                 <X className="h-5 w-5" />
               </button>
-              <SidebarContent onNavigate={() => setOpen(false)} />
+              <SidebarContent onNavigate={() => setOpen(false)} onLogout={logout} />
             </motion.aside>
           </>
         )}

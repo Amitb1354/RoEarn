@@ -26,6 +26,7 @@ function RegisterPage() {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   // Read ?ref= param and store in sessionStorage
   useEffect(() => {
@@ -48,6 +49,12 @@ function RegisterPage() {
 
     if (!isSupabaseConfigured) {
       setError("Authentication service (Supabase) is not configured yet. Please configure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in Vercel.");
+      setLoading(false);
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
       setLoading(false);
       return;
     }
@@ -154,6 +161,15 @@ function RegisterPage() {
             placeholder="Choose a password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            required
+            minLength={6}
+          />
+          <FieldInput
+            icon={Lock}
+            type="password"
+            placeholder="Confirm password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
             required
             minLength={6}
           />

@@ -1,5 +1,5 @@
 import express from 'express';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
@@ -18,6 +18,7 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
 }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+app.set('trust proxy', 1);
 
 const DAILY_TASK_CAPS = {
   ptc: 40,
@@ -175,18 +176,58 @@ async function resolveAuthorizedUserId(req, requestedUserId) {
   return { userId: requestedUserId, signedSession: false };
 }
 
-// Apply rate limiting without relying on IP address
+function rateLimitKey(req) {
+  return (
+    req.headers.authorization ||
+    req.body?.userId ||
+    req.query?.userId ||
+    ipKeyGenerator(req.ip || req.socket.remoteAddress || '127.0.0.1')
+  );
+}
+
+// Apply rate limiting without relying only on IP address
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100,
-  keyGenerator: (req) => req.headers['authorization'] || 'global-limit',
+  max: 180,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: rateLimitKey,
+});
+
+const authMutationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: rateLimitKey,
+  message: { error: 'Too many account attempts. Please try again later.' },
 });
 
 const taskCompletionLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 12,
-  keyGenerator: (req) => req.headers.authorization || req.body?.userId || 'task-global-limit',
+  max: 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: rateLimitKey,
   message: { error: 'Too many task completion attempts. Please slow down.' },
+});
+
+const withdrawLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: rateLimitKey,
+  message: { error: 'Too many withdrawal attempts. Please try again later.' },
+});
+
+const nonceLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: rateLimitKey,
+  message: { error: 'Too many security nonce requests. Please slow down.' },
 });
 
 app.use(limiter);
@@ -220,7 +261,7 @@ app.get('/api/offerwalls', async (req, res) => {
 
 // 2. NEW USER REGISTRATION WITH FINGERPRINT VERIFICATION
 // Prevents players from creating multiple accounts on the same machine
-app.post('/api/register', async (req, res) => {
+app.post('/api/register', authMutationLimiter, async (req, res) => {
   const { userId, username, deviceFingerprint, referredBy } = req.body;
   if (!userId || !username || !deviceFingerprint) {
     return res.status(400).json({ error: 'Missing registration details' });
@@ -264,7 +305,7 @@ app.post('/api/register', async (req, res) => {
 });
 
 // 3. GENERATE ROLLING NONCE
-app.get('/api/nonce', async (req, res) => {
+app.get('/api/nonce', nonceLimiter, async (req, res) => {
   const userId = req.headers['authorization'];
   if (!userId) {
     return res.status(401).json({ error: 'Missing Authorization header' });
@@ -433,7 +474,7 @@ app.post('/api/offerwall/postback', taskCompletionLimiter, async (req, res) => {
 });
 
 // 5. SECURE WITHDRAWAL PROCESSING (Gift card tiers only)
-app.post('/api/withdraw', async (req, res) => {
+app.post('/api/withdraw', withdrawLimiter, async (req, res) => {
   const { userId, tierPoints } = req.body;
   if (!userId || !tierPoints) {
     return res.status(400).json({ error: 'Missing checkout parameters' });
